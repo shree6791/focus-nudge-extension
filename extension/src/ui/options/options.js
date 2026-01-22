@@ -20,7 +20,6 @@ const upgradeButton = document.getElementById('upgradeButton');
 const manageSubscriptionSection = document.getElementById('manageSubscriptionSection');
 const manageButton = document.getElementById('manageButton');
 const checkLicenseBtn = document.getElementById('checkLicenseBtn');
-const clearLicenseBtn = document.getElementById('clearLicenseBtn');
 
 // Load and display current state
 async function loadState() {
@@ -408,40 +407,6 @@ if (checkLicenseBtn) {
   });
 }
 
-// Clear License button (for testing Basic→Pro flow)
-if (clearLicenseBtn) {
-  clearLicenseBtn.addEventListener('click', async () => {
-    if (!confirm('Clear local license? This will reset you to Basic for testing. Your subscription will still be active - you can reactivate by clicking "Check for License".')) {
-      return;
-    }
-    
-    clearLicenseBtn.disabled = true;
-    clearLicenseBtn.textContent = 'Clearing...';
-    
-    try {
-      // Clear license key and cache
-      await chrome.storage.local.remove([
-        'focusNudgeLicenseKey',
-        'focusNudgeLicenseCache',
-        'focusNudgeLicenseCacheTime',
-        'focusNudgePlan'
-      ]);
-      
-      console.log('[Focus Nudge] License cleared for testing');
-      
-      // Reload state to show Basic
-      await loadState();
-      
-      alert('License cleared! You are now on Basic plan. Click "Check for License" to reactivate Pro.');
-    } catch (error) {
-      console.error('[Focus Nudge] Clear license error:', error);
-      alert('Error clearing license: ' + error.message);
-    } finally {
-      clearLicenseBtn.disabled = false;
-      clearLicenseBtn.textContent = 'Clear License (Testing)';
-    }
-  });
-}
 
 // Initialize on load
 document.addEventListener('DOMContentLoaded', async () => {
