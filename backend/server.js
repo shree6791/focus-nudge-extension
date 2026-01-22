@@ -13,11 +13,16 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 
 // IMPORTANT: Webhook endpoint must receive raw body for signature verification
-// So we need to exclude it from JSON parsing
-app.use('/api/webhook', express.raw({ type: 'application/json' }));
-
-// JSON parsing for all other routes
-app.use(express.json());
+// Skip JSON parsing for webhook route - it needs raw body
+app.use((req, res, next) => {
+  if (req.path === '/api/webhook') {
+    // Skip JSON parsing for webhook - it will use raw body parser in route handler
+    next();
+  } else {
+    // Parse JSON for all other routes
+    express.json()(req, res, next);
+  }
+});
 
 // In-memory license store (replace with database in production)
 const licenses = new Map(); // userId -> { licenseKey, stripeCustomerId, status, expiresAt }
@@ -193,13 +198,14 @@ app.post('/api/create-portal-session', async (req, res) => {
 /**
  * Stripe Webhook Handler
  * Handles subscription events
- * NOTE: This route must receive raw body (handled by middleware above)
+ * NOTE: This route MUST receive raw body for signature verification
  */
-app.post('/api/webhook', async (req, res) => {
+app.post('/api/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
   const sig = req.headers['stripe-signature'];
   let event;
 
   try {
+    // req.body is now a Buffer (raw body) - required for signature verification
     event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
   } catch (err) {
     console.error('Webhook signature verification failed:', err.message);
