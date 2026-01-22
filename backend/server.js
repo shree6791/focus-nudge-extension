@@ -385,20 +385,31 @@ app.get('/success', (req, res) => {
       <div class="container">
         <h1>✅ Payment Successful!</h1>
         <p>Your Focus Nudge Pro subscription is now active.</p>
-        <p>Please return to the extension options page to see your Pro features.</p>
+        <p><strong>Next steps:</strong></p>
+        <ol style="text-align: left; max-width: 400px; margin: 20px auto;">
+          <li>Return to the Focus Nudge extension</li>
+          <li>Open the Options page (right-click extension icon → Options)</li>
+          <li>Refresh the page if needed</li>
+          <li>You should now see "Pro" status!</li>
+        </ol>
         <p style="font-size: 14px; color: #999; margin-top: 30px;">
-          If the extension doesn't update automatically, reload the options page.
+          The license will be activated automatically. If you don't see Pro status, wait 10-20 seconds and refresh the options page.
         </p>
       </div>
       <script>
-        // Try to detect if extension is installed and open options page
-        setTimeout(() => {
+        // Don't try to redirect to chrome-extension URL (doesn't work)
+        // Instead, show instructions and let user manually return to extension
+        console.log('Payment successful. Session ID:', '${session_id || ''}');
+        
+        // Store success flag in localStorage as backup (extension can check this)
+        if ('${session_id || ''}') {
           try {
-            window.location = 'chrome-extension://meibfhdipbiohpbijholkpdidigmehfc/src/ui/options/options.html?payment_success=true&session_id=${session_id || ''}';
+            localStorage.setItem('focusNudgePaymentSuccess', '${session_id || ''}');
+            localStorage.setItem('focusNudgePaymentTime', Date.now().toString());
           } catch(e) {
-            // Extension not accessible, user will need to manually open
+            console.warn('Could not store payment success in localStorage');
           }
-        }, 2000);
+        }
       </script>
     </body>
     </html>

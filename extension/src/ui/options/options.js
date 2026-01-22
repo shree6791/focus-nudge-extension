@@ -151,7 +151,27 @@ async function handleStripeRedirect() {
   const sessionId = urlParams.get('session_id');
   const paymentSuccess = urlParams.get('payment_success');
   
-  if (sessionId || paymentSuccess) {
+  // Also check localStorage for payment success (set by success page)
+  let storedSessionId = null;
+  try {
+    const stored = localStorage.getItem('focusNudgePaymentSuccess');
+    const storedTime = localStorage.getItem('focusNudgePaymentTime');
+    if (stored && storedTime) {
+      const timeDiff = Date.now() - parseInt(storedTime);
+      // Only use if less than 5 minutes old
+      if (timeDiff < 5 * 60 * 1000) {
+        storedSessionId = stored;
+        // Clear it after using
+        localStorage.removeItem('focusNudgePaymentSuccess');
+        localStorage.removeItem('focusNudgePaymentTime');
+      }
+    }
+  } catch(e) {
+    // localStorage not available, continue
+  }
+  
+  if (sessionId || paymentSuccess || storedSessionId) {
+    const actualSessionId = sessionId || storedSessionId;
     // Checkout completed - get license key from backend
     try {
       const userId = await getUserId();
@@ -159,7 +179,12 @@ async function handleStripeRedirect() {
       
       // Poll for license key (webhook might take a moment)
       let attempts = 0;
-      const maxAttempts = 15; // Increased to 15 seconds
+      const maxAttempts = 20; // Increased to 20 seconds (webhook can be slow)
+      
+      // Show loading indicator
+      if (planStatusEl) {
+        planStatusEl.textContent = 'Activating...';
+      }
       
       while (attempts < maxAttempts) {
         const response = await fetch(`${apiUrl}/api/get-license?userId=${encodeURIComponent(userId)}`);
@@ -174,7 +199,7 @@ async function handleStripeRedirect() {
           await loadState();
           
           // Show success message
-          alert('Payment successful! Pro features are now active.');
+          alert('✅ Payment successful! Pro features are now active.');
           
           // Clean URL
           window.history.replaceState({}, document.title, window.location.pathname);
@@ -187,7 +212,10 @@ async function handleStripeRedirect() {
       }
       
       // If we get here, license wasn't found
-      alert('Payment received, but license activation is pending. The webhook may take a few moments. Please refresh this page in 10-20 seconds.');
+      if (planStatusEl) {
+        planStatusEl.textContent = 'Basic';
+      }
+      alert('Payment received, but license activation is pending. The webhook may take a few moments. Please refresh this page in 10-20 seconds, or use the manual license creation method.');
     } catch (error) {
       console.error('License activation error:', error);
       alert('Payment received, but license activation failed. Please contact support.');
