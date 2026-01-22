@@ -73,8 +73,6 @@ async function handleUpgrade() {
 
     const userId = await getUserId();
     const apiUrl = getApiBaseUrl();
-    const extensionId = chrome.runtime.id;
-    const extensionOptionsUrl = chrome.runtime.getURL('src/ui/options/options.html');
     
     // Create checkout session (Stripe Checkout will handle coupon codes natively)
     const response = await fetch(`${apiUrl}/api/create-checkout-session`, {
@@ -82,11 +80,7 @@ async function handleUpgrade() {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        userId: userId,
-        extensionId: extensionId,
-        extensionOptionsUrl: extensionOptionsUrl
-      })
+      body: JSON.stringify({ userId })
     });
 
     if (!response.ok) {
@@ -390,7 +384,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const sessionId = urlParams.get('session_id');
     const paymentSuccess = urlParams.get('payment_success');
     
-    // Also check localStorage for payment info (from success page)
+    // Check localStorage for payment info (from success page)
     let localStorageSessionId = null;
     try {
       const storedSessionId = localStorage.getItem('focusNudgePaymentSessionId');
@@ -398,14 +392,12 @@ document.addEventListener('DOMContentLoaded', async () => {
       // Only use if stored within last 5 minutes
       if (storedSessionId && storedTime && (Date.now() - parseInt(storedTime)) < 5 * 60 * 1000) {
         localStorageSessionId = storedSessionId;
-        // Clear it after reading
+        // Clear after reading
         localStorage.removeItem('focusNudgePaymentSessionId');
         localStorage.removeItem('focusNudgePaymentTime');
         localStorage.removeItem('focusNudgePaymentUserId');
       }
-    } catch(e) {
-      // localStorage not available, ignore
-    }
+    } catch(e) {}
     
     // Check for payment indicators in URL or localStorage
     if (sessionId || paymentSuccess || localStorageSessionId) {

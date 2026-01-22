@@ -111,25 +111,21 @@ app.get('/api/verify-license', async (req, res) => {
  */
 app.post('/api/create-checkout-session', async (req, res) => {
   try {
-    const { userId, extensionId, extensionOptionsUrl } = req.body;
+    const { userId } = req.body;
 
     if (!userId) {
       return res.status(400).json({ error: 'Missing userId' });
     }
 
-    // Stripe can't redirect to chrome-extension:// URLs directly
     // Use web-accessible success page - extension will pick up payment from localStorage
     const safeBaseUrl = BACKEND_URL.includes('chrome-extension') 
       ? 'https://focus-nudge-extension.onrender.com' 
       : BACKEND_URL;
     
-    // Success URL - no extension URL needed (we use localStorage instead)
     const successUrl = `${safeBaseUrl}/success?session_id={CHECKOUT_SESSION_ID}&userId=${encodeURIComponent(userId)}`;
     const cancelUrl = `${safeBaseUrl}/cancel`;
     
     console.log(`[CHECKOUT] Creating session for userId: ${userId}`);
-    console.log(`[CHECKOUT] Using Price ID: ${STRIPE_PRICE_ID}`);
-    console.log(`[CHECKOUT] Note: Coupon codes can be entered directly on Stripe Checkout page`);
 
     // Build checkout session config
     // Stripe Checkout will automatically show "Have a promo code?" link
@@ -369,35 +365,26 @@ app.get('/success', (req, res) => {
   const { session_id, userId } = req.query;
   
   // Store payment info in localStorage (extension will check this)
-  res.send(`
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>Payment Successful</title>
-      <meta charset="utf-8">
-    </head>
-    <body style="font-family: system-ui; text-align: center; padding: 50px;">
-      <h1>✅ Payment Successful!</h1>
-      <p><strong>Your Pro subscription is being activated...</strong></p>
-      <p style="color: #666; margin-top: 30px;">
-        Open the Focus Nudge extension options page to see your Pro features activate automatically.
-      </p>
-      <p style="color: #999; font-size: 14px; margin-top: 20px;">
-        Right-click the extension icon → Options
-      </p>
-      <script>
-        // Store payment info for extension to pick up
-        try {
-          ${session_id ? `localStorage.setItem('focusNudgePaymentSessionId', ${JSON.stringify(session_id)});` : ''}
-          ${userId ? `localStorage.setItem('focusNudgePaymentUserId', ${JSON.stringify(userId)});` : ''}
-          localStorage.setItem('focusNudgePaymentTime', Date.now().toString());
-        } catch(e) {
-          console.warn('Could not store payment info');
-        }
-      </script>
-    </body>
-    </html>
-  `);
+  res.send(`<!DOCTYPE html>
+<html>
+<head>
+  <title>Payment Successful</title>
+  <meta charset="utf-8">
+</head>
+<body style="font-family:system-ui;text-align:center;padding:50px">
+  <h1>✅ Payment Successful!</h1>
+  <p><strong>Your Pro subscription is being activated...</strong></p>
+  <p style="color:#666;margin-top:30px">Open the Focus Nudge extension options page to see your Pro features activate automatically.</p>
+  <p style="color:#999;font-size:14px;margin-top:20px">Right-click the extension icon → Options</p>
+  <script>
+    try {
+      ${session_id ? `localStorage.setItem('focusNudgePaymentSessionId',${JSON.stringify(session_id)});` : ''}
+      ${userId ? `localStorage.setItem('focusNudgePaymentUserId',${JSON.stringify(userId)});` : ''}
+      localStorage.setItem('focusNudgePaymentTime',Date.now().toString());
+    }catch(e){}
+  </script>
+</body>
+</html>`);
 });
 
 /**
