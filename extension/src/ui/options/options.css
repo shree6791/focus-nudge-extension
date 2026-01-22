@@ -1,0 +1,164 @@
+body {
+  font-family: system-ui, -apple-system, Arial, sans-serif;
+  margin: 0;
+  padding: 20px;
+  background: #f5f5f5;
+  color: #333;
+}
+
+.container {
+  max-width: 600px;
+  margin: 0 auto;
+  background: white;
+  padding: 30px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+h1 {
+  margin: 0 0 30px 0;
+  font-size: 24px;
+  color: #333;
+}
+
+h2 {
+  margin: 0 0 15px 0;
+  font-size: 18px;
+  color: #555;
+}
+
+.section {
+  margin-bottom: 30px;
+  padding-bottom: 30px;
+  border-bottom: 1px solid #eee;
+}
+
+.section:last-child {
+  border-bottom: none;
+}
+
+.plan-display {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+#planStatus {
+  font-size: 18px;
+  font-weight: 600;
+  color: #4CAF50;
+}
+
+.dev-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.dev-toggle input[type="checkbox"] {
+  cursor: pointer;
+}
+
+.pro-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.pro-settings.locked {
+  opacity: 0.6;
+}
+
+.setting-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.setting-row label {
+  font-weight: 500;
+  min-width: 180px;
+}
+
+.setting-row select,
+.setting-row input[type="number"] {
+  width: 120px;
+  padding: 6px 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.setting-row select:disabled,
+.setting-row input[type="number"]:disabled {
+  background: #f5f5f5;
+  cursor: not-allowed;
+}
+
+.pro-note {
+  font-size: 12px;
+  color: #999;
+  font-style: italic;
+  margin: 10px 0 0 0;
+}
+
+.summary {
+  background: #f9f9f9;
+  padding: 15px;
+  border-radius: 4px;
+  margin-bottom: 15px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.summary p {
+  margin: 0;
+}
+
+.summary .footnote {
+  font-size: 12px;
+  color: #666;
+  margin-top: 8px;
+}
+
+.button {
+  background: #4CAF50;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.button:hover {
+  background: #45a049;
+}
+
+.button:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.upgrade-button {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  font-weight: 600;
+  margin-top: 10px;
+}
+
+.upgrade-button:hover {
+  background: linear-gradient(135deg, #5568d3 0%, #653a8f 100%);
+}
+
+.upgrade-note {
+  font-size: 12px;
+  color: #666;
+  margin-top: 8px;
+  text-align: center;
+}
+
+#manageSubscriptionSection {
+  margin-top: 10px;
+}

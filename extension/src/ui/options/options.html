@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Focus Nudge - Options</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Focus Nudge Settings</h1>
+
+    <!-- Plan Section -->
+    <section class="section">
+      <h2>Plan</h2>
+      <div class="plan-display">
+        <span id="planStatus">Basic</span>
+        <label class="dev-toggle" id="devToggleContainer" style="display: none;">
+          <input type="checkbox" id="devProToggle">
+          <span>Enable Pro (dev)</span>
+        </label>
+      </div>
+      <div id="upgradeSection" style="display: none;">
+        <button id="upgradeButton" class="button upgrade-button">Upgrade to Pro - $9.99/month</button>
+        <p class="upgrade-note">Unlock customizable tones, drift thresholds, and cooldown settings</p>
+      </div>
+      <div id="manageSubscriptionSection" style="display: none;">
+        <button id="manageButton" class="button">Manage Subscription</button>
+      </div>
+    </section>
+
+    <!-- Pro Settings Section -->
+    <section class="section">
+      <h2>Pro Settings</h2>
+      <div id="proSettings" class="pro-settings locked">
+        <div class="setting-row">
+          <label for="tone">Tone</label>
+          <select id="tone" disabled>
+            <option value="gentle">Gentle</option>
+            <option value="motivational">Motivational</option>
+            <option value="sarcastic">Sarcastic</option>
+          </select>
+        </div>
+
+        <div class="setting-row">
+          <label for="driftThreshold">Drift Threshold (minutes)</label>
+          <input type="number" id="driftThreshold" min="1" max="120" disabled>
+        </div>
+
+        <div class="setting-row">
+          <label for="cooldown">Cooldown (minutes)</label>
+          <input type="number" id="cooldown" min="1" max="120" disabled>
+        </div>
+
+        <p class="pro-note">Pro unlocks customization</p>
+      </div>
+    </section>
+
+    <!-- Weekly Summary Section -->
+    <section class="section">
+      <h2>Weekly Summary</h2>
+      <div id="weeklySummary" class="summary">
+        <p>Loading...</p>
+      </div>
+      <button id="resetSummary" class="button">Reset this week's summary</button>
+    </section>
+  </div>
+
+  <script src="https://js.stripe.com/v3/"></script>
+  <script src="../../shared/plan.js"></script>
+  <script src="../../shared/metrics.js"></script>
+  <script src="../../shared/settings.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>

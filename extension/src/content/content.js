@@ -70,11 +70,11 @@
     el.appendChild(inner);
     document.body.appendChild(el);
 
-    // Auto-hide after 10 seconds
+    // Auto-hide after 20 seconds (increased for better visibility)
     setTimeout(() => {
       el.classList.add("fade-out");
       setTimeout(() => el.remove(), 450);
-    }, 10000);
+    }, 20000);
   }
 
   function getMode() {
@@ -109,7 +109,16 @@
     }
 
     if (msg?.type === "FOCUS_NUDGE_SHOW_OVERLAY") {
+      // Show overlay
+      const now = Date.now();
       showOverlay(msg.message || "Hey. 👀");
+      
+      // Record nudge shown
+      chrome.runtime.sendMessage({
+        type: "NUDGE_SHOWN",
+        ts_ms: now
+      }).catch(() => {}); // Ignore errors
+      
       sendResponse({ ok: true });
       return true;
     }
