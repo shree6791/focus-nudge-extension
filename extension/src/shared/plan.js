@@ -211,6 +211,7 @@
       getEffectiveSettings, 
       setProPlan, 
       setLicenseKey,
+      getLicenseKey,
       clearDevPlan,
       getApiBaseUrl,
       getUserId,

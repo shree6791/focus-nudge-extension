@@ -10,7 +10,7 @@ const weeklySummaryEl = document.getElementById('weeklySummary');
 const resetSummaryBtn = document.getElementById('resetSummary');
 
 // Extract from global scope (loaded via script tags)
-const { getPlan, getEffectiveSettings, setLicenseKey, getApiBaseUrl, getUserId } = self.FocusNudgePlan;
+const { getPlan, getEffectiveSettings, setLicenseKey, getApiBaseUrl, getUserId, getLicenseKey } = self.FocusNudgePlan;
 const { getWeeklySummary, resetWeeklySummary } = self.FocusNudgeMetrics;
 const { getSettings, saveSettings } = self.FocusNudgeSettings;
 
@@ -31,9 +31,13 @@ async function loadState() {
   // Show upgrade/manage buttons based on plan
   if (plan.isPro) {
     upgradeSection.style.display = 'none';
-    if (plan.source === 'stripe') {
+    // Show manage subscription for Stripe users (not dev mode)
+    // Check if user has a license key (indicates Stripe subscription)
+    const hasLicenseKey = await getLicenseKey();
+    if (plan.source === 'stripe' || (hasLicenseKey && plan.source !== 'dev')) {
       manageSubscriptionSection.style.display = 'block';
     } else {
+      // Dev plan or no license key - don't show manage subscription
       manageSubscriptionSection.style.display = 'none';
     }
   } else {
