@@ -362,38 +362,10 @@ if (IS_DEV) {
   });
 }
 
-/**
- * Get public configuration (publishable key)
- * GET /api/config
- */
-app.get('/api/config', (req, res) => {
-  try {
-    const publishableKey = process.env.STRIPE_PUBLISHABLE_KEY;
-    
-    if (!publishableKey) {
-      return res.status(500).json({ error: 'Stripe publishable key not configured' });
-    }
-
-    // Security check: Ensure it's a publishable key, not a secret key
-    if (!publishableKey.startsWith('pk_test_') && !publishableKey.startsWith('pk_live_')) {
-      console.error('SECURITY WARNING: STRIPE_PUBLISHABLE_KEY appears to be a secret key!');
-      return res.status(500).json({ 
-        error: 'Invalid publishable key format. Must start with pk_test_ or pk_live_' 
-      });
-    }
-
-    res.json({ 
-      stripePublishableKey: publishableKey 
-    });
-  } catch (error) {
-    console.error('Config error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
 
 /**
  * Success page (after Stripe checkout)
- * Automatically redirects to extension options page
+ * Minimal redirect page - extension handles activation automatically
  */
 app.get('/success', (req, res) => {
   const { session_id, userId, extId, extUrl } = req.query;
@@ -405,157 +377,21 @@ app.get('/success', (req, res) => {
       ? `chrome-extension://${extId}/src/ui/options/options.html?payment_success=1&session_id=${session_id || ''}&userId=${encodeURIComponent(userId || '')}`
       : null);
   
+  // Ultra-simple page - just redirect attempt
   res.send(`
     <!DOCTYPE html>
     <html>
     <head>
-      <title>Payment Successful - Focus Nudge</title>
+      <title>Payment Successful</title>
       <meta charset="utf-8">
-      <style>
-        body {
-          font-family: system-ui, -apple-system, Arial, sans-serif;
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          min-height: 100vh;
-          margin: 0;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        }
-        .container {
-          background: white;
-          padding: 40px;
-          border-radius: 12px;
-          box-shadow: 0 10px 40px rgba(0,0,0,0.2);
-          text-align: center;
-          max-width: 500px;
-          animation: slideIn 0.3s ease-out;
-        }
-        @keyframes slideIn {
-          from {
-            opacity: 0;
-            transform: translateY(-20px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-        h1 { 
-          color: #4CAF50; 
-          margin: 0 0 20px 0; 
-          font-size: 28px;
-        }
-        .success-icon {
-          font-size: 64px;
-          margin-bottom: 20px;
-        }
-        p { 
-          color: #666; 
-          line-height: 1.6; 
-          margin: 10px 0;
-        }
-        .redirect-message {
-          color: #999;
-          font-size: 14px;
-          margin-top: 30px;
-        }
-        .button {
-          display: inline-block;
-          margin-top: 20px;
-          padding: 12px 24px;
-          background: #4CAF50;
-          color: white;
-          text-decoration: none;
-          border-radius: 6px;
-          font-weight: 600;
-          transition: background 0.2s;
-          cursor: pointer;
-          border: none;
-        }
-        .button:hover { 
-          background: #45a049; 
-        }
-        .spinner {
-          display: inline-block;
-          width: 16px;
-          height: 16px;
-          border: 2px solid #f3f3f3;
-          border-top: 2px solid #4CAF50;
-          border-radius: 50%;
-          animation: spin 1s linear infinite;
-          margin-left: 10px;
-        }
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-      </style>
+      ${extensionOptionsUrl ? `<meta http-equiv="refresh" content="0;url=${extensionOptionsUrl}">` : ''}
     </head>
-    <body>
-      <div class="container">
-        <div class="success-icon">✅</div>
-        <h1>Payment Successful!</h1>
-        <p><strong>Your Focus Nudge Pro subscription is now active.</strong></p>
-        <p class="redirect-message">
-          <strong>Next step:</strong> Open the Focus Nudge extension options page to activate your Pro features.
-        </p>
-        <ol style="text-align: left; max-width: 400px; margin: 20px auto; color: #666;">
-          <li>Right-click the Focus Nudge extension icon in your browser toolbar</li>
-          <li>Click "Options" from the menu</li>
-          <li>Your Pro features will activate automatically!</li>
-        </ol>
-        ${extensionOptionsUrl ? `
-        <button class="button" id="openExtensionBtn">
-          Try Opening Extension Options
-        </button>
-        <p style="font-size: 12px; color: #999; margin-top: 10px;">
-          If the button doesn't work, use the steps above.
-        </p>
-        ` : ''}
-      </div>
+    <body style="font-family: system-ui; text-align: center; padding: 50px;">
+      <h1>✅ Payment Successful!</h1>
+      <p>Redirecting to extension...</p>
+      ${extensionOptionsUrl ? `<p><a href="${extensionOptionsUrl}">Click here if not redirected</a></p>` : ''}
       <script>
-        ${extensionOptionsUrl ? `
-        // Chrome blocks chrome-extension:// URLs from web pages for security
-        // So we can't auto-redirect, but we can try to open it on button click
-        const extensionUrl = ${JSON.stringify(extensionOptionsUrl)};
-        
-        // Handle button click - try to open extension (may be blocked by Chrome)
-        const btn = document.getElementById('openExtensionBtn');
-        if (btn) {
-          btn.addEventListener('click', function(e) {
-            e.preventDefault();
-            // Try to open extension URL (Chrome may block this)
-            try {
-              // Method 1: Try direct link
-              const link = document.createElement('a');
-              link.href = extensionUrl;
-              link.target = '_blank';
-              document.body.appendChild(link);
-              link.click();
-              document.body.removeChild(link);
-              
-              // If that doesn't work, show alert
-              setTimeout(() => {
-                alert('If the extension options page didn\'t open, please:\n\n1. Right-click the Focus Nudge extension icon\n2. Click "Options"\n3. Your Pro features will activate automatically!');
-              }, 500);
-            } catch (e) {
-              console.warn('Could not open extension URL:', e);
-              alert('Please manually open the extension options page:\n\n1. Right-click the Focus Nudge extension icon\n2. Click "Options"\n3. Your Pro features will activate automatically!');
-            }
-          });
-        }
-        ` : ''}
-        
-        // Store payment info for extension to pick up
-        if ('${session_id || ''}') {
-          try {
-            localStorage.setItem('focusNudgePaymentSuccess', '${session_id || ''}');
-            localStorage.setItem('focusNudgePaymentTime', Date.now().toString());
-            localStorage.setItem('focusNudgePaymentUserId', '${userId || ''}');
-          } catch(e) {
-            console.warn('Could not store payment success in localStorage');
-          }
-        }
+        ${extensionOptionsUrl ? `try { window.location.href = ${JSON.stringify(extensionOptionsUrl)}; } catch(e) {}` : ''}
       </script>
     </body>
     </html>

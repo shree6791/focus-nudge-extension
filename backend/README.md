@@ -20,14 +20,14 @@ npm install
 
 2. Get your Stripe keys from [Stripe Dashboard](https://dashboard.stripe.com):
    - **Secret Key**: `sk_test_...` (for testing) or `sk_live_...` (for production)
-   - **Publishable Key**: `pk_test_...` (for testing) or `pk_live_...` (for production)
    - **Webhook Secret**: Create a webhook endpoint in Stripe Dashboard and copy the secret
+   - **Note**: Publishable key is NOT needed - we use Stripe Checkout (server-side), not Stripe.js
 
 3. Update `.env` with your keys:
    ```env
    STRIPE_SECRET_KEY=sk_test_...
-   STRIPE_PUBLISHABLE_KEY=pk_test_...
    STRIPE_WEBHOOK_SECRET=whsec_...
+   STRIPE_PRICE_ID=price_xxxxx
    PORT=3000
    ```
 

@@ -19,8 +19,8 @@ Extension (Chrome) → Backend API → Stripe
 1. **Create Stripe Account**: Go to [stripe.com](https://stripe.com) and create an account
 2. **Get API Keys**: 
    - Go to [Stripe Dashboard → Developers → API keys](https://dashboard.stripe.com/apikeys)
-   - Copy your **Publishable key** (starts with `pk_test_` or `pk_live_`)
    - Copy your **Secret key** (starts with `sk_test_` or `sk_live_`)
+   - **Note**: Publishable key is NOT needed since we use Stripe Checkout (server-side redirect), not Stripe.js
 
 ## Step 2: Set Up Backend Server
 
@@ -41,11 +41,13 @@ npm install
 2. Update `.env` with your Stripe keys:
    ```env
    STRIPE_SECRET_KEY=sk_test_...
-   STRIPE_PUBLISHABLE_KEY=pk_test_...
    STRIPE_WEBHOOK_SECRET=whsec_...  # Will get this after webhook setup
    STRIPE_PRICE_ID=price_xxxxx  # Required: Your Stripe Price ID
+   BACKEND_URL=https://your-backend-url.com  # Optional: defaults to render.com URL
    PORT=3000
    ```
+   
+   **Note**: `STRIPE_PUBLISHABLE_KEY` is NOT needed - we use Stripe Checkout (server-side redirect), not Stripe.js (client-side)
    
    **Note on STRIPE_PRICE_ID**: 
    - **Required**: Must be set to your Stripe Price ID (starts with `price_`)
@@ -146,12 +148,6 @@ Edit `extension/src/shared/plan.js`:
 const API_BASE_URL = 'https://your-backend-domain.com'; // Update this
 ```
 
-### 4.2 Update Stripe Publishable Key
-
-Edit `extension/src/ui/options/options.js`:
-```javascript
-stripePublishableKey = 'pk_test_...'; // Replace with your publishable key
-```
 
 ### 4.3 Update Manifest Host Permissions
 
@@ -279,7 +275,7 @@ Response: { url: string }
 
 ## Security Notes
 
-- **Never expose secret keys** in extension code (only publishable key)
+- **Never expose secret keys** in extension code (we use server-side Stripe Checkout, so no keys in extension)
 - **Always verify webhook signatures** (already implemented)
 - **Use HTTPS** in production
 - **Store licenses in database** (not in-memory)
