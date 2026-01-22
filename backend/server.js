@@ -16,8 +16,12 @@ const PORT = process.env.PORT || 3000;
 
 // Constants
 const BACKEND_URL = process.env.BACKEND_URL || 'https://focus-nudge-extension.onrender.com';
-const SUBSCRIPTION_PRICE_CENTS = 99; // $0.99
-const SUBSCRIPTION_INTERVAL = 'month';
+const STRIPE_PRICE_ID = process.env.STRIPE_PRICE_ID; // Required: Your Stripe Price ID (e.g., 'price_xxxxx')
+
+if (!STRIPE_PRICE_ID) {
+  console.error('ERROR: STRIPE_PRICE_ID environment variable is required');
+  process.exit(1);
+}
 
 // Middleware
 app.use(cors());
@@ -107,7 +111,7 @@ app.get('/api/verify-license', async (req, res) => {
  */
 app.post('/api/create-checkout-session', async (req, res) => {
   try {
-    const { userId, extensionId, extensionOptionsUrl } = req.body;
+    const { userId, extensionId, extensionOptionsUrl, couponCode } = req.body;
 
     if (!userId) {
       return res.status(400).json({ error: 'Missing userId' });
@@ -126,22 +130,14 @@ app.post('/api/create-checkout-session', async (req, res) => {
     console.log(`[CHECKOUT] Creating session for userId: ${userId}`);
     console.log(`[CHECKOUT] Extension ID: ${extensionId || 'not provided'}`);
     console.log(`[CHECKOUT] Extension Options URL: ${extensionOptionsUrl || 'not provided'}`);
+    console.log(`[CHECKOUT] Coupon Code: ${couponCode || 'not provided'}`);
+    console.log(`[CHECKOUT] Using Price ID: ${STRIPE_PRICE_ID}`);
 
-    // Create Stripe Checkout Session
-    const session = await stripe.checkout.sessions.create({
+    // Build checkout session config
+    const sessionConfig = {
       payment_method_types: ['card'],
       line_items: [{
-        price_data: {
-          currency: 'usd',
-          product_data: {
-            name: 'Focus Nudge Pro',
-            description: 'Unlock customizable nudges and advanced features',
-          },
-          unit_amount: SUBSCRIPTION_PRICE_CENTS,
-          recurring: {
-            interval: SUBSCRIPTION_INTERVAL,
-          },
-        },
+        price: STRIPE_PRICE_ID,
         quantity: 1,
       }],
       mode: 'subscription',
@@ -149,7 +145,17 @@ app.post('/api/create-checkout-session', async (req, res) => {
       cancel_url: cancelUrl,
       client_reference_id: userId,
       metadata: { userId },
-    });
+    };
+
+    // Add coupon code if provided
+    if (couponCode) {
+      sessionConfig.discounts = [{
+        coupon: couponCode,
+      }];
+    }
+
+    // Create Stripe Checkout Session
+    const session = await stripe.checkout.sessions.create(sessionConfig);
 
     res.json({ sessionId: session.id, url: session.url });
   } catch (error) {

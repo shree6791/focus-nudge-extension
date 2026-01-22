@@ -43,8 +43,14 @@ npm install
    STRIPE_SECRET_KEY=sk_test_...
    STRIPE_PUBLISHABLE_KEY=pk_test_...
    STRIPE_WEBHOOK_SECRET=whsec_...  # Will get this after webhook setup
+   STRIPE_PRICE_ID=price_xxxxx  # Required: Your Stripe Price ID
    PORT=3000
    ```
+   
+   **Note on STRIPE_PRICE_ID**: 
+   - **Required**: Must be set to your Stripe Price ID (starts with `price_`)
+   - You can find this in Stripe Dashboard → Products → Your Product → Pricing section
+   - The server will exit with an error if this is not set
 
 ### 2.3 Deploy Backend
 
@@ -258,9 +264,11 @@ Response: { valid: boolean, isPro: boolean }
 ### Create Checkout
 ```
 POST /api/create-checkout-session
-Body: { userId: string, returnUrl: string }
+Body: { userId: string, extensionId?: string, extensionOptionsUrl?: string, couponCode?: string }
 Response: { sessionId: string, url: string }
 ```
+
+**Note**: The `couponCode` parameter is optional. Users can enter coupon codes in the extension options page before upgrading.
 
 ### Create Portal
 ```

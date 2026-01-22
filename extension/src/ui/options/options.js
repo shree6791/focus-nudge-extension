@@ -76,6 +76,10 @@ async function handleUpgrade() {
     const extensionId = chrome.runtime.id;
     const extensionOptionsUrl = chrome.runtime.getURL('src/ui/options/options.html');
     
+    // Get coupon code if provided
+    const couponCodeInput = document.getElementById('couponCode');
+    const couponCode = couponCodeInput?.value?.trim() || null;
+    
     // Create checkout session
     const response = await fetch(`${apiUrl}/api/create-checkout-session`, {
       method: 'POST',
@@ -85,7 +89,8 @@ async function handleUpgrade() {
       body: JSON.stringify({
         userId: userId,
         extensionId: extensionId,
-        extensionOptionsUrl: extensionOptionsUrl
+        extensionOptionsUrl: extensionOptionsUrl,
+        couponCode: couponCode
       })
     });
 
