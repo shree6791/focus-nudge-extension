@@ -19,6 +19,7 @@ const upgradeSection = document.getElementById('upgradeSection');
 const upgradeButton = document.getElementById('upgradeButton');
 const manageSubscriptionSection = document.getElementById('manageSubscriptionSection');
 const manageButton = document.getElementById('manageButton');
+const checkLicenseBtn = document.getElementById('checkLicenseBtn');
 
 // Load and display current state
 async function loadState() {
@@ -177,6 +178,10 @@ async function pollForLicenseActivation() {
     const userId = await getUserId();
     const apiUrl = getApiBaseUrl();
     
+    console.log('[Focus Nudge] Starting license activation check...');
+    console.log('[Focus Nudge] Current userId:', userId);
+    console.log('[Focus Nudge] API URL:', apiUrl);
+    
     // Get session ID from URL if available
     const urlParams = new URLSearchParams(window.location.search);
     const sessionId = urlParams.get('session_id');
@@ -187,9 +192,11 @@ async function pollForLicenseActivation() {
     }
     
     // First, try waiting for webhook (faster if it works)
-    const licenseKey = await pollForLicense(userId, apiUrl, 10); // 10 seconds for webhook
+    // Increase polling time since webhook might take a moment
+    const licenseKey = await pollForLicense(userId, apiUrl, 15); // 15 seconds for webhook
     
     if (licenseKey) {
+      console.log('[Focus Nudge] ✅ License key received:', licenseKey);
       await activateLicense(licenseKey);
       return;
     }
@@ -200,16 +207,18 @@ async function pollForLicenseActivation() {
       const fallbackLicenseKey = await tryAutoCreateLicense(userId, sessionId, apiUrl);
       
       if (fallbackLicenseKey) {
+        console.log('[Focus Nudge] ✅ License created via fallback:', fallbackLicenseKey);
         await activateLicense(fallbackLicenseKey);
         return;
       }
     }
     
     // License not found yet
+    console.log('[Focus Nudge] ❌ License not found after polling');
     if (planStatusEl) {
       planStatusEl.textContent = 'Basic';
     }
-    alert('Payment received, but license activation is pending. Please refresh this page in 10-20 seconds.');
+    alert(`Payment received, but license not found yet.\n\nYour userId: ${userId}\n\nPlease:\n1. Wait 10-20 seconds for webhook to process\n2. Click "Check for License" button\n3. Or refresh this page`);
   } catch (error) {
     console.error('[Focus Nudge] License activation error:', error);
     if (planStatusEl) {
@@ -344,6 +353,26 @@ resetSummaryBtn.addEventListener('click', async () => {
 // Event listeners
 upgradeButton.addEventListener('click', handleUpgrade);
 manageButton.addEventListener('click', handleManageSubscription);
+
+// Check License button (for manual activation after payment)
+if (checkLicenseBtn) {
+  checkLicenseBtn.addEventListener('click', async () => {
+    checkLicenseBtn.disabled = true;
+    checkLicenseBtn.textContent = 'Checking...';
+    
+    try {
+      const userId = await getUserId();
+      console.log('[Focus Nudge] Manual license check - userId:', userId);
+      await checkLicenseActivation(true); // Force check
+    } catch (error) {
+      console.error('[Focus Nudge] Manual license check error:', error);
+      alert('Error checking for license: ' + error.message);
+    } finally {
+      checkLicenseBtn.disabled = false;
+      checkLicenseBtn.textContent = 'Check for License';
+    }
+  });
+}
 
 // Initialize on load
 document.addEventListener('DOMContentLoaded', async () => {
