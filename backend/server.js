@@ -365,33 +365,37 @@ if (IS_DEV) {
 
 /**
  * Success page (after Stripe checkout)
- * Minimal redirect page - extension handles activation automatically
+ * Stores payment info in localStorage - extension will pick it up automatically
  */
 app.get('/success', (req, res) => {
-  const { session_id, userId, extId, extUrl } = req.query;
+  const { session_id, userId } = req.query;
   
-  // Build extension options URL with payment success params
-  const extensionOptionsUrl = extUrl 
-    ? `${extUrl}?payment_success=1&session_id=${session_id || ''}&userId=${encodeURIComponent(userId || '')}`
-    : (extId 
-      ? `chrome-extension://${extId}/src/ui/options/options.html?payment_success=1&session_id=${session_id || ''}&userId=${encodeURIComponent(userId || '')}`
-      : null);
-  
-  // Ultra-simple page - just redirect attempt
+  // Store payment info in localStorage (extension will check this)
   res.send(`
     <!DOCTYPE html>
     <html>
     <head>
       <title>Payment Successful</title>
       <meta charset="utf-8">
-      ${extensionOptionsUrl ? `<meta http-equiv="refresh" content="0;url=${extensionOptionsUrl}">` : ''}
     </head>
     <body style="font-family: system-ui; text-align: center; padding: 50px;">
       <h1>✅ Payment Successful!</h1>
-      <p>Redirecting to extension...</p>
-      ${extensionOptionsUrl ? `<p><a href="${extensionOptionsUrl}">Click here if not redirected</a></p>` : ''}
+      <p><strong>Your Pro subscription is being activated...</strong></p>
+      <p style="color: #666; margin-top: 30px;">
+        Open the Focus Nudge extension options page to see your Pro features activate automatically.
+      </p>
+      <p style="color: #999; font-size: 14px; margin-top: 20px;">
+        Right-click the extension icon → Options
+      </p>
       <script>
-        ${extensionOptionsUrl ? `try { window.location.href = ${JSON.stringify(extensionOptionsUrl)}; } catch(e) {}` : ''}
+        // Store payment info for extension to pick up
+        try {
+          ${session_id ? `localStorage.setItem('focusNudgePaymentSessionId', ${JSON.stringify(session_id)});` : ''}
+          ${userId ? `localStorage.setItem('focusNudgePaymentUserId', ${JSON.stringify(userId)});` : ''}
+          localStorage.setItem('focusNudgePaymentTime', Date.now().toString());
+        } catch(e) {
+          console.warn('Could not store payment info');
+        }
       </script>
     </body>
     </html>

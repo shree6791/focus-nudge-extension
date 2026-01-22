@@ -390,9 +390,33 @@ document.addEventListener('DOMContentLoaded', async () => {
     const sessionId = urlParams.get('session_id');
     const paymentSuccess = urlParams.get('payment_success');
     
-    // Check for payment indicators in URL
-    if (sessionId || paymentSuccess) {
+    // Also check localStorage for payment info (from success page)
+    let localStorageSessionId = null;
+    try {
+      const storedSessionId = localStorage.getItem('focusNudgePaymentSessionId');
+      const storedTime = localStorage.getItem('focusNudgePaymentTime');
+      // Only use if stored within last 5 minutes
+      if (storedSessionId && storedTime && (Date.now() - parseInt(storedTime)) < 5 * 60 * 1000) {
+        localStorageSessionId = storedSessionId;
+        // Clear it after reading
+        localStorage.removeItem('focusNudgePaymentSessionId');
+        localStorage.removeItem('focusNudgePaymentTime');
+        localStorage.removeItem('focusNudgePaymentUserId');
+      }
+    } catch(e) {
+      // localStorage not available, ignore
+    }
+    
+    // Check for payment indicators in URL or localStorage
+    if (sessionId || paymentSuccess || localStorageSessionId) {
       // Has payment indicators - check with loading indicator
+      // Use sessionId from URL or localStorage
+      if (localStorageSessionId && !sessionId) {
+        // Add sessionId to URL for the activation logic
+        const newUrl = new URL(window.location);
+        newUrl.searchParams.set('session_id', localStorageSessionId);
+        window.history.replaceState({}, '', newUrl);
+      }
       await checkLicenseActivation(true);
     } else {
       // No payment indicators - check silently (webhook might have fired)
