@@ -238,6 +238,14 @@ app.get('/api/config', (req, res) => {
       return res.status(500).json({ error: 'Stripe publishable key not configured' });
     }
 
+    // Security check: Ensure it's a publishable key, not a secret key
+    if (!publishableKey.startsWith('pk_test_') && !publishableKey.startsWith('pk_live_')) {
+      console.error('SECURITY WARNING: STRIPE_PUBLISHABLE_KEY appears to be a secret key!');
+      return res.status(500).json({ 
+        error: 'Invalid publishable key format. Must start with pk_test_ or pk_live_' 
+      });
+    }
+
     res.json({ 
       stripePublishableKey: publishableKey 
     });

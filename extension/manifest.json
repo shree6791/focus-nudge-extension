@@ -6,7 +6,7 @@
   "permissions": ["tabs", "storage"],
   "host_permissions": [
     "https://www.linkedin.com/*",
-    "https://your-backend-domain.com/*"
+    "https://focus-nudge-extension.onrender.com/*"
   ],
   "background": {
     "service_worker": "src/background/service_worker.js"
