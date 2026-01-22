@@ -15,6 +15,8 @@ function initWebhookHandlers(stripeInstance) {
     const userId = session.client_reference_id || session.metadata?.userId;
     
     console.log(`[WEBHOOK] Checkout completed - userId: ${userId}, mode: ${session.mode}, subscription: ${session.subscription}`);
+    console.log(`[WEBHOOK] client_reference_id: ${session.client_reference_id}`);
+    console.log(`[WEBHOOK] metadata:`, JSON.stringify(session.metadata));
     
     if (!userId || session.mode !== 'subscription') {
       console.warn(`[WEBHOOK] ⚠️ Checkout completed but missing userId or not subscription mode. userId: ${userId}, mode: ${session.mode}`);
@@ -27,9 +29,17 @@ function initWebhookHandlers(stripeInstance) {
       
       console.log(`[WEBHOOK] Subscription retrieved - customerId: ${customerId}, status: ${subscription.status}`);
       
+      // Check if license already exists
+      const existing = licenses.get(userId);
+      if (existing && existing.status === 'active') {
+        console.log(`[WEBHOOK] ⚠️ License already exists for userId: ${userId}, skipping creation`);
+        return;
+      }
+      
       const licenseKey = createLicense(userId, customerId, subscription.id, licenses);
       
       console.log(`[WEBHOOK] ✅ License activated for userId: ${userId}, licenseKey: ${licenseKey}`);
+      console.log(`[WEBHOOK] Total licenses now: ${licenses.size}`);
     } catch (error) {
       console.error(`[WEBHOOK] Error processing checkout.session.completed:`, error);
       throw error;

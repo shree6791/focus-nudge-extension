@@ -49,15 +49,29 @@ app.get('/api/get-license', async (req, res) => {
       return res.status(400).json({ error: 'Missing userId' });
     }
 
+    console.log(`[GET-LICENSE] Request for userId: ${userId}`);
+    console.log(`[GET-LICENSE] Total licenses in store: ${licenses.size}`);
+    console.log(`[GET-LICENSE] License exists: ${licenses.has(userId)}`);
+
     const license = licenses.get(userId);
 
-    if (!isValidLicense(license)) {
-      return res.status(404).json({ error: 'No active license found' });
+    if (!license) {
+      console.log(`[GET-LICENSE] ❌ No license found for userId: ${userId}`);
+      // List all userIds for debugging
+      const allUserIds = Array.from(licenses.keys());
+      console.log(`[GET-LICENSE] Available userIds: ${allUserIds.join(', ')}`);
+      return res.status(404).json({ error: 'No license found for this user' });
     }
 
+    if (!isValidLicense(license)) {
+      console.log(`[GET-LICENSE] ❌ License exists but invalid. Status: ${license.status}`);
+      return res.status(404).json({ error: 'License found but not active' });
+    }
+
+    console.log(`[GET-LICENSE] ✅ Returning license key for userId: ${userId}`);
     return res.json({ licenseKey: license.licenseKey });
   } catch (error) {
-    console.error('Get license error:', error);
+    console.error('[GET-LICENSE] Error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -110,6 +124,8 @@ app.post('/api/create-checkout-session', async (req, res) => {
     const cancelUrl = `${safeBaseUrl}/cancel`;
     
     console.log(`[CHECKOUT] Creating session for userId: ${userId}`);
+    console.log(`[CHECKOUT] Extension ID: ${extensionId || 'not provided'}`);
+    console.log(`[CHECKOUT] Extension Options URL: ${extensionOptionsUrl || 'not provided'}`);
 
     // Create Stripe Checkout Session
     const session = await stripe.checkout.sessions.create({

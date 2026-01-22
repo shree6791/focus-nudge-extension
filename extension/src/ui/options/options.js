@@ -227,16 +227,25 @@ async function pollForLicenseActivation() {
  * @returns {Promise<string|null>} License key if found, null otherwise
  */
 async function pollForLicense(userId, apiUrl, maxAttempts = 10) {
+  console.log(`[Focus Nudge] Polling for license - userId: ${userId}, maxAttempts: ${maxAttempts}`);
+  
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
-      const response = await fetch(`${apiUrl}/api/get-license?userId=${encodeURIComponent(userId)}`);
+      const url = `${apiUrl}/api/get-license?userId=${encodeURIComponent(userId)}`;
+      console.log(`[Focus Nudge] Poll attempt ${attempt + 1}/${maxAttempts}: ${url}`);
+      
+      const response = await fetch(url);
       
       if (response.ok) {
-        const { licenseKey } = await response.json();
-        return licenseKey;
+        const data = await response.json();
+        console.log(`[Focus Nudge] ✅ License found!`, data);
+        return data.licenseKey;
+      } else {
+        const errorText = await response.text();
+        console.log(`[Focus Nudge] Poll attempt ${attempt + 1} failed: ${response.status} - ${errorText}`);
       }
     } catch (error) {
-      console.warn(`[Focus Nudge] Poll attempt ${attempt + 1} failed:`, error);
+      console.warn(`[Focus Nudge] Poll attempt ${attempt + 1} error:`, error);
     }
     
     // Wait before retrying (except on last attempt)
@@ -245,6 +254,7 @@ async function pollForLicense(userId, apiUrl, maxAttempts = 10) {
     }
   }
   
+  console.log(`[Focus Nudge] ❌ License not found after ${maxAttempts} attempts`);
   return null;
 }
 
@@ -339,17 +349,29 @@ manageButton.addEventListener('click', handleManageSubscription);
 document.addEventListener('DOMContentLoaded', async () => {
   await loadState(); // Load current state first
   
-  // Check for license activation if Basic (webhook might have fired)
+  // Always check for license activation if Basic (webhook might have fired)
   const plan = await getPlan();
   if (!plan.isPro) {
     // Check URL params for payment success indicators
     const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('session_id') || urlParams.get('payment_success')) {
-      // Has payment indicators, check for license activation
+    const sessionId = urlParams.get('session_id');
+    const paymentSuccess = urlParams.get('payment_success');
+    
+    console.log('[Focus Nudge] Options page loaded. Plan:', plan);
+    console.log('[Focus Nudge] URL params - session_id:', sessionId, 'payment_success:', paymentSuccess);
+    
+    if (sessionId || paymentSuccess) {
+      // Has payment indicators, check for license activation with loading
+      console.log('[Focus Nudge] Payment detected, checking for license activation...');
       await checkLicenseActivation();
     } else {
-      // No payment indicators, check once silently (webhook might have fired)
-      checkLicenseActivation(false).catch(() => {}); // Silent check, don't show errors
+      // No payment indicators, but check once anyway (webhook might have fired)
+      console.log('[Focus Nudge] No payment indicators, checking silently for license...');
+      checkLicenseActivation(false).catch((err) => {
+        console.log('[Focus Nudge] Silent license check failed (this is OK):', err);
+      });
     }
+  } else {
+    console.log('[Focus Nudge] Already Pro, skipping license check');
   }
 });
