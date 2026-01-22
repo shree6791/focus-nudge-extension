@@ -92,6 +92,13 @@ app.post('/api/create-checkout-session', async (req, res) => {
       return res.status(400).json({ error: 'Missing userId' });
     }
 
+    // Stripe can't redirect to chrome-extension:// URLs
+    // Use a web-accessible success page or a simple redirect page
+    // For now, use a simple success message page
+    const baseUrl = process.env.BACKEND_URL || req.headers.origin || 'https://focus-nudge-extension.onrender.com';
+    const successUrl = `${baseUrl}/success?session_id={CHECKOUT_SESSION_ID}&userId=${encodeURIComponent(userId)}`;
+    const cancelUrl = returnUrl && returnUrl.startsWith('http') ? returnUrl : `${baseUrl}/cancel`;
+
     // Create Stripe Checkout Session
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
@@ -112,8 +119,8 @@ app.post('/api/create-checkout-session', async (req, res) => {
         },
       ],
       mode: 'subscription',
-      success_url: returnUrl || `${req.headers.origin}/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: returnUrl || `${req.headers.origin}/cancel`,
+      success_url: successUrl,
+      cancel_url: cancelUrl,
       client_reference_id: userId, // Store userId for webhook
       metadata: {
         userId: userId,
@@ -172,14 +179,20 @@ app.post('/api/webhook', express.raw({ type: 'application/json' }), async (req, 
   }
 
   try {
+    console.log(`[WEBHOOK] Received event: ${event.type}, id: ${event.id}`);
+    
     switch (event.type) {
       case 'checkout.session.completed':
         const session = event.data.object;
         const userId = session.client_reference_id || session.metadata?.userId;
         
+        console.log(`[WEBHOOK] Checkout completed - userId: ${userId}, mode: ${session.mode}, subscription: ${session.subscription}`);
+        
         if (userId && session.mode === 'subscription') {
           const subscription = await stripe.subscriptions.retrieve(session.subscription);
           const customerId = subscription.customer;
+          
+          console.log(`[WEBHOOK] Subscription retrieved - customerId: ${customerId}, status: ${subscription.status}`);
           
           // Generate license key
           const licenseKey = `fn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -192,7 +205,9 @@ app.post('/api/webhook', express.raw({ type: 'application/json' }), async (req, 
             expiresAt: null, // Subscription-based, no expiration
           });
           
-          console.log(`License activated for userId: ${userId}`);
+          console.log(`[WEBHOOK] ✅ License activated for userId: ${userId}, licenseKey: ${licenseKey}`);
+        } else {
+          console.warn(`[WEBHOOK] ⚠️ Checkout completed but missing userId or not subscription mode. userId: ${userId}, mode: ${session.mode}`);
         }
         break;
 
@@ -227,6 +242,72 @@ app.post('/api/webhook', express.raw({ type: 'application/json' }), async (req, 
 });
 
 /**
+ * Debug endpoint: Manually create license from Stripe customer
+ * GET /api/debug/create-license?userId=xxx&customerId=xxx
+ * Use this if webhook didn't fire or server restarted
+ */
+app.get('/api/debug/create-license', async (req, res) => {
+  try {
+    const { userId, customerId } = req.query;
+
+    if (!userId || !customerId) {
+      return res.status(400).json({ error: 'Missing userId or customerId' });
+    }
+
+    // Verify customer exists in Stripe
+    const customer = await stripe.customers.retrieve(customerId);
+    const subscriptions = await stripe.subscriptions.list({ customer: customerId, limit: 1 });
+
+    if (subscriptions.data.length === 0) {
+      return res.status(404).json({ error: 'No subscription found for this customer' });
+    }
+
+    const subscription = subscriptions.data[0];
+    
+    if (subscription.status !== 'active' && subscription.status !== 'trialing') {
+      return res.status(400).json({ error: `Subscription status is ${subscription.status}, not active` });
+    }
+
+    // Generate license key
+    const licenseKey = `fn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    licenses.set(userId, {
+      licenseKey,
+      stripeCustomerId: customerId,
+      stripeSubscriptionId: subscription.id,
+      status: 'active',
+      expiresAt: null,
+    });
+    
+    console.log(`[DEBUG] License manually created for userId: ${userId}, customerId: ${customerId}`);
+    
+    res.json({ 
+      success: true, 
+      licenseKey,
+      message: 'License created successfully' 
+    });
+  } catch (error) {
+    console.error('Debug create license error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Debug endpoint: List all licenses (for debugging)
+ * GET /api/debug/licenses
+ */
+app.get('/api/debug/licenses', (req, res) => {
+  const licenseList = Array.from(licenses.entries()).map(([userId, license]) => ({
+    userId,
+    licenseKey: license.licenseKey,
+    customerId: license.stripeCustomerId,
+    status: license.status
+  }));
+  
+  res.json({ count: licenses.size, licenses: licenseList });
+});
+
+/**
  * Get public configuration (publishable key)
  * GET /api/config
  */
@@ -253,6 +334,117 @@ app.get('/api/config', (req, res) => {
     console.error('Config error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
+});
+
+/**
+ * Success page (after Stripe checkout)
+ * Shows success message and instructions to return to extension
+ */
+app.get('/success', (req, res) => {
+  const { session_id, userId } = req.query;
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Payment Successful - Focus Nudge</title>
+      <meta charset="utf-8">
+      <style>
+        body {
+          font-family: system-ui, -apple-system, Arial, sans-serif;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          min-height: 100vh;
+          margin: 0;
+          background: #f5f5f5;
+        }
+        .container {
+          background: white;
+          padding: 40px;
+          border-radius: 8px;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+          text-align: center;
+          max-width: 500px;
+        }
+        h1 { color: #4CAF50; margin: 0 0 20px 0; }
+        p { color: #666; line-height: 1.6; }
+        .button {
+          display: inline-block;
+          margin-top: 20px;
+          padding: 12px 24px;
+          background: #4CAF50;
+          color: white;
+          text-decoration: none;
+          border-radius: 4px;
+          font-weight: 600;
+        }
+        .button:hover { background: #45a049; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <h1>✅ Payment Successful!</h1>
+        <p>Your Focus Nudge Pro subscription is now active.</p>
+        <p>Please return to the extension options page to see your Pro features.</p>
+        <p style="font-size: 14px; color: #999; margin-top: 30px;">
+          If the extension doesn't update automatically, reload the options page.
+        </p>
+      </div>
+      <script>
+        // Try to detect if extension is installed and open options page
+        setTimeout(() => {
+          try {
+            window.location = 'chrome-extension://meibfhdipbiohpbijholkpdidigmehfc/src/ui/options/options.html?payment_success=true&session_id=${session_id || ''}';
+          } catch(e) {
+            // Extension not accessible, user will need to manually open
+          }
+        }, 2000);
+      </script>
+    </body>
+    </html>
+  `);
+});
+
+/**
+ * Cancel page (if user cancels checkout)
+ */
+app.get('/cancel', (req, res) => {
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Payment Cancelled - Focus Nudge</title>
+      <meta charset="utf-8">
+      <style>
+        body {
+          font-family: system-ui, -apple-system, Arial, sans-serif;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          min-height: 100vh;
+          margin: 0;
+          background: #f5f5f5;
+        }
+        .container {
+          background: white;
+          padding: 40px;
+          border-radius: 8px;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+          text-align: center;
+          max-width: 500px;
+        }
+        h1 { color: #666; margin: 0 0 20px 0; }
+        p { color: #666; line-height: 1.6; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <h1>Payment Cancelled</h1>
+        <p>You can return to the extension and try again anytime.</p>
+      </div>
+    </body>
+    </html>
+  `);
 });
 
 // Health check

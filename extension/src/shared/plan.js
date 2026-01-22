@@ -106,23 +106,25 @@
    * @returns {Promise<{isPro: boolean}>}
    */
   async function getPlan() {
-    // First check dev toggle (for development/testing)
+    // First check for valid Stripe license (prioritize real licenses over dev toggle)
+    const licenseKey = await getLicenseKey();
+    if (licenseKey) {
+      const licenseCheck = await verifyLicense();
+      if (licenseCheck.valid && licenseCheck.isPro) {
+        // Valid Stripe license - update local storage and return
+        await chrome.storage.local.set({ focusNudgePlan: { isPro: true, source: 'stripe' } });
+        return { isPro: true, source: 'stripe' };
+      }
+    }
+
+    // Fall back to dev toggle (for development/testing only)
     const stored = await chrome.storage.local.get({ focusNudgePlan: { isPro: false } });
     if (stored.focusNudgePlan.isPro) {
       // Dev mode enabled - return immediately
       return { isPro: true, source: 'dev' };
     }
 
-    // Check license with backend
-    const licenseCheck = await verifyLicense();
-    
-    if (licenseCheck.valid && licenseCheck.isPro) {
-      // Update local storage to reflect Pro status
-      await chrome.storage.local.set({ focusNudgePlan: { isPro: true, source: 'stripe' } });
-      return { isPro: true, source: 'stripe' };
-    }
-
-    // Not Pro
+    // No license and no dev toggle - Basic plan
     return { isPro: false, source: 'basic' };
   }
 
@@ -186,6 +188,15 @@
   }
 
   /**
+   * Clear dev plan status (reset to Basic)
+   * Useful for clearing dev toggle after testing
+   */
+  async function clearDevPlan() {
+    await chrome.storage.local.set({ focusNudgePlan: { isPro: false, source: 'basic' } });
+    await chrome.storage.local.remove(['focusNudgeLicenseCache', 'focusNudgeLicenseCacheTime']);
+  }
+
+  /**
    * Get API base URL
    * @returns {string}
    */
@@ -200,6 +211,7 @@
       getEffectiveSettings, 
       setProPlan, 
       setLicenseKey,
+      clearDevPlan,
       getApiBaseUrl,
       getUserId,
       BASIC_DEFAULTS 

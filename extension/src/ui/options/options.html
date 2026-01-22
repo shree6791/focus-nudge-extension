@@ -15,10 +15,6 @@
       <h2>Plan</h2>
       <div class="plan-display">
         <span id="planStatus">Basic</span>
-        <label class="dev-toggle" id="devToggleContainer" style="display: none;">
-          <input type="checkbox" id="devProToggle">
-          <span>Enable Pro (dev)</span>
-        </label>
       </div>
       <div id="upgradeSection" style="display: none;">
         <button id="upgradeButton" class="button upgrade-button">Upgrade to Pro - $9.99/month</button>
@@ -64,9 +60,19 @@
       </div>
       <button id="resetSummary" class="button">Reset this week's summary</button>
     </section>
+
+    <!-- Debug Section (hidden by default, can be shown via console) -->
+    <section class="section" id="debugSection" style="display: none; border-top: 2px solid #ff6b6b;">
+      <h2 style="color: #ff6b6b;">Debug Tools</h2>
+      <div id="debugInfo" style="margin-bottom: 15px; padding: 10px; background: #f9f9f9; border-radius: 4px;">
+        <p style="margin: 5px 0; font-size: 12px;"><strong>User ID:</strong> <span id="debugUserId" style="font-family: monospace; word-break: break-all;">Loading...</span></p>
+        <button id="copyUserId" class="button" style="background: #666; font-size: 12px; padding: 5px 10px; margin-top: 5px;">Copy User ID</button>
+      </div>
+      <button id="clearDevPlan" class="button" style="background: #ff6b6b;">Clear Dev Plan (Reset to Basic)</button>
+      <p style="font-size: 12px; color: #666; margin-top: 10px;">Use this if you see "Pro" but have no Stripe payment</p>
+    </section>
   </div>
 
-  <script src="https://js.stripe.com/v3/"></script>
   <script src="../../shared/plan.js"></script>
   <script src="../../shared/metrics.js"></script>
   <script src="../../shared/settings.js"></script>

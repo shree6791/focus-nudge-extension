@@ -1,15 +1,7 @@
-// Options page: Plan toggle, Pro settings, Weekly summary
-
-// Check if dev build (for dev toggle visibility)
-// Always show in development - can be hidden for production builds
-const isDevBuild = true; // Set to false for production builds
-// Alternative: const isDevBuild = chrome.runtime.getManifest().version.includes('dev') || 
-//                            chrome.runtime.getManifest().name.includes('Dev');
+// Options page: Plan settings, Pro settings, Weekly summary
 
 // DOM elements
 const planStatusEl = document.getElementById('planStatus');
-const devToggleContainer = document.getElementById('devToggleContainer');
-const devProToggle = document.getElementById('devProToggle');
 const proSettings = document.getElementById('proSettings');
 const toneSelect = document.getElementById('tone');
 const driftThresholdInput = document.getElementById('driftThreshold');
@@ -18,60 +10,25 @@ const weeklySummaryEl = document.getElementById('weeklySummary');
 const resetSummaryBtn = document.getElementById('resetSummary');
 
 // Extract from global scope (loaded via script tags)
-const { getPlan, getEffectiveSettings, setProPlan, setLicenseKey, getApiBaseUrl, getUserId } = self.FocusNudgePlan;
+const { getPlan, getEffectiveSettings, setLicenseKey, clearDevPlan, getApiBaseUrl, getUserId } = self.FocusNudgePlan;
 const { getWeeklySummary, resetWeeklySummary } = self.FocusNudgeMetrics;
 const { getSettings, saveSettings } = self.FocusNudgeSettings;
-
-// Stripe configuration (get from backend or manifest)
-let stripe = null;
-let stripePublishableKey = null; // Will be set in initStripe()
 
 // DOM elements for Stripe
 const upgradeSection = document.getElementById('upgradeSection');
 const upgradeButton = document.getElementById('upgradeButton');
 const manageSubscriptionSection = document.getElementById('manageSubscriptionSection');
 const manageButton = document.getElementById('manageButton');
-
-// Initialize Stripe
-async function initStripe() {
-  try {
-    // Fetch publishable key from backend (reads from environment variables)
-    const apiUrl = getApiBaseUrl();
-    
-    try {
-      const response = await fetch(`${apiUrl}/api/config`);
-      if (response.ok) {
-        const config = await response.json();
-        stripePublishableKey = config.stripePublishableKey;
-      } else {
-        console.warn('[Focus Nudge] Failed to fetch Stripe config from backend');
-      }
-    } catch (fetchError) {
-      console.warn('[Focus Nudge] Error fetching Stripe config:', fetchError);
-    }
-    
-    if (stripePublishableKey && stripePublishableKey.startsWith('pk_')) {
-      stripe = Stripe(stripePublishableKey);
-      console.log('[Focus Nudge] Stripe initialized successfully');
-    } else {
-      console.warn('[Focus Nudge] Stripe publishable key not configured. Payment features will not work.');
-    }
-  } catch (error) {
-    console.error('Stripe initialization error:', error);
-  }
-}
+const clearDevPlanBtn = document.getElementById('clearDevPlan');
+const debugSection = document.getElementById('debugSection');
+const debugUserIdEl = document.getElementById('debugUserId');
+const copyUserIdBtn = document.getElementById('copyUserId');
 
 // Load and display current state
 async function loadState() {
   // Load plan
   const plan = await getPlan();
   planStatusEl.textContent = plan.isPro ? 'Pro' : 'Basic';
-  
-  // Show dev toggle only in dev builds
-  if (isDevBuild) {
-    devToggleContainer.style.display = 'flex';
-    devProToggle.checked = plan.isPro && plan.source === 'dev';
-  }
   
   // Show upgrade/manage buttons based on plan
   if (plan.isPro) {
@@ -136,16 +93,12 @@ async function handleUpgrade() {
 
     const { sessionId, url } = await response.json();
 
-    // Redirect to Stripe Checkout
-    if (stripe && sessionId) {
-      // Use Stripe.js redirect
-      const result = await stripe.redirectToCheckout({ sessionId });
-      if (result.error) {
-        throw new Error(result.error.message);
-      }
-    } else if (url) {
-      // Fallback to direct URL redirect
+    // Redirect directly to Stripe Checkout URL
+    // (Manifest V3 doesn't allow external scripts, so we use direct redirect)
+    if (url) {
       window.location.href = url;
+    } else {
+      throw new Error('No checkout URL received from server');
     }
   } catch (error) {
     console.error('Checkout error:', error);
@@ -195,8 +148,9 @@ async function handleManageSubscription() {
 async function handleStripeRedirect() {
   const urlParams = new URLSearchParams(window.location.search);
   const sessionId = urlParams.get('session_id');
+  const paymentSuccess = urlParams.get('payment_success');
   
-  if (sessionId) {
+  if (sessionId || paymentSuccess) {
     // Checkout completed - get license key from backend
     try {
       const userId = await getUserId();
@@ -204,7 +158,7 @@ async function handleStripeRedirect() {
       
       // Poll for license key (webhook might take a moment)
       let attempts = 0;
-      const maxAttempts = 10;
+      const maxAttempts = 15; // Increased to 15 seconds
       
       while (attempts < maxAttempts) {
         const response = await fetch(`${apiUrl}/api/get-license?userId=${encodeURIComponent(userId)}`);
@@ -232,7 +186,7 @@ async function handleStripeRedirect() {
       }
       
       // If we get here, license wasn't found
-      alert('Payment received, but license activation is pending. Please refresh in a moment.');
+      alert('Payment received, but license activation is pending. The webhook may take a few moments. Please refresh this page in 10-20 seconds.');
     } catch (error) {
       console.error('License activation error:', error);
       alert('Payment received, but license activation failed. Please contact support.');
@@ -252,10 +206,6 @@ async function loadWeeklySummary() {
 }
 
 // Event listeners
-devProToggle.addEventListener('change', async (e) => {
-  await setProPlan(e.target.checked);
-  await loadState();
-});
 
 toneSelect.addEventListener('change', async (e) => {
   const settings = await getSettings();
@@ -286,13 +236,63 @@ resetSummaryBtn.addEventListener('click', async () => {
   }
 });
 
+// Clear dev plan button (for debugging)
+if (clearDevPlanBtn) {
+  clearDevPlanBtn.addEventListener('click', async () => {
+    if (confirm('Clear dev plan and reset to Basic? This will remove any dev toggle status.')) {
+      await clearDevPlan();
+      await loadState();
+      alert('Reset to Basic plan. Reload the page to see changes.');
+    }
+  });
+}
+
+// Show debug section if plan source is 'dev'
+async function checkDebugSection() {
+  const plan = await getPlan();
+  if (plan.source === 'dev') {
+    debugSection.style.display = 'block';
+    // Load user ID for debugging
+    const userId = await getUserId();
+    if (debugUserIdEl) {
+      debugUserIdEl.textContent = userId;
+    }
+  }
+}
+
+// Copy User ID button
+if (copyUserIdBtn) {
+  copyUserIdBtn.addEventListener('click', async () => {
+    const userId = await getUserId();
+    try {
+      await navigator.clipboard.writeText(userId);
+      copyUserIdBtn.textContent = 'Copied!';
+      setTimeout(() => {
+        copyUserIdBtn.textContent = 'Copy User ID';
+      }, 2000);
+    } catch (err) {
+      // Fallback for older browsers
+      const textArea = document.createElement('textarea');
+      textArea.value = userId;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      copyUserIdBtn.textContent = 'Copied!';
+      setTimeout(() => {
+        copyUserIdBtn.textContent = 'Copy User ID';
+      }, 2000);
+    }
+  });
+}
+
 // Event listeners
 upgradeButton.addEventListener('click', handleUpgrade);
 manageButton.addEventListener('click', handleManageSubscription);
 
 // Initialize on load
 document.addEventListener('DOMContentLoaded', async () => {
-  await initStripe();
   await handleStripeRedirect(); // Check for Stripe redirect
   await loadState();
+  await checkDebugSection(); // Show debug tools if needed
 });
