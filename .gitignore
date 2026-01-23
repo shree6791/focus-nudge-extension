@@ -12,6 +12,11 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+
+# Database files
+backend/licenses.db
+backend/licenses.db-shm
+backend/licenses.db-wal
 *~
 
 # Logs

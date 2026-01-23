@@ -12,10 +12,27 @@ async function loadPlan() {
   }
 }
 
+async function checkStatus() {
+  try {
+    const stored = await chrome.storage.local.get({ focusNudgeEnabled: true });
+    const statusEl = document.getElementById("status");
+    if (!stored.focusNudgeEnabled) {
+      statusEl.textContent = "Focus Nudge is disabled";
+      statusEl.style.color = "#d32f2f";
+    } else {
+      statusEl.textContent = "Focus Nudge is active";
+      statusEl.style.color = "#4CAF50";
+    }
+  } catch (err) {
+    console.error('Status check failed:', err);
+  }
+}
+
 document.getElementById("optionsLink").addEventListener("click", (e) => {
   e.preventDefault();
   chrome.runtime.openOptionsPage();
 });
 
-// Load plan status
+// Load plan status and check if enabled
 loadPlan();
+checkStatus();

@@ -49,6 +49,8 @@ chrome.runtime.onStartup.addListener(() => {
 
 chrome.runtime.onInstalled.addListener(() => {
   ensureWeekInitialized();
+  // Ensure extension is enabled by default
+  chrome.storage.local.set({ focusNudgeEnabled: true });
 });
 
 // Early exit detection: track when user leaves LinkedIn
@@ -92,6 +94,9 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   if (changeInfo.status === 'complete' && tab.url) {
     if (tab.url.startsWith("https://www.linkedin.com/")) {
       lastActiveLinkedInTabId = tabId;
+      // Content script should auto-inject via manifest.json
+      // Just verify it's there after a short delay
+      // Content script will auto-inject via manifest.json
     } else if (tabId === lastActiveLinkedInTabId) {
       // User navigated away from LinkedIn
       await checkForEarlyExit(tab);
@@ -151,11 +156,15 @@ function updateDriftTime(state, mode, behavior, delta) {
 async function tick() {
   // Check if extension is enabled
   const stored = await chrome.storage.local.get({ focusNudgeEnabled: true });
-  if (!stored.focusNudgeEnabled) return;
+  if (!stored.focusNudgeEnabled) {
+    return;
+  }
 
   // Get active LinkedIn tab
   const [active] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-  if (!active?.id || !active.url?.startsWith("https://www.linkedin.com/")) return;
+  if (!active?.id || !active.url?.startsWith("https://www.linkedin.com/")) {
+    return;
+  }
 
   const tabId = active.id;
 
@@ -176,7 +185,12 @@ async function tick() {
   try {
     resp = await chrome.tabs.sendMessage(tabId, { type: "FOCUS_NUDGE_GET_STATE" });
   } catch (err) {
-    // Content script not ready or tab closed
+    // Content script not ready or tab closed - this is normal on page load
+    tabState.set(tabId, state);
+    return;
+  }
+  
+  if (!resp) {
     tabState.set(tabId, state);
     return;
   }
@@ -198,10 +212,14 @@ async function tick() {
 
   if (shouldNudge) {
     const msg = pickMessage(effectiveSettings.tone);
-    await chrome.tabs.sendMessage(tabId, { type: "FOCUS_NUDGE_SHOW_OVERLAY", message: msg });
-    state.lastNudgeMs = nowMs();
-    // Reset drift to prevent spam if user ignores
-    state.driftMs = driftThresholdMs * DRIFT_RESET_RATIO;
+    try {
+      await chrome.tabs.sendMessage(tabId, { type: "FOCUS_NUDGE_SHOW_OVERLAY", message: msg });
+      state.lastNudgeMs = nowMs();
+      // Reset drift to prevent spam if user ignores
+      state.driftMs = driftThresholdMs * DRIFT_RESET_RATIO;
+    } catch (err) {
+      // Failed to show nudge - content script may have unloaded
+    }
   }
 
   // Update state

@@ -120,6 +120,12 @@
 
   // ---- Messaging with background ----
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    if (msg?.type === "FOCUS_NUDGE_PING") {
+      // Simple ping to confirm content script is loaded
+      sendResponse({ ok: true, loaded: true });
+      return true;
+    }
+    
     if (msg?.type === "FOCUS_NUDGE_GET_STATE") {
       sendResponse({
         mode: getMode(),

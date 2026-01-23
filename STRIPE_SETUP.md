@@ -260,18 +260,20 @@ Response: { valid: boolean, isPro: boolean }
 ### Create Checkout
 ```
 POST /api/create-checkout-session
-Body: { userId: string, extensionId?: string, extensionOptionsUrl?: string, couponCode?: string }
+Body: { userId: string }
 Response: { sessionId: string, url: string }
 ```
 
-**Note**: The `couponCode` parameter is optional. Users can enter coupon codes in the extension options page before upgrading.
+**Note**: Coupon codes are handled natively by Stripe Checkout. Users can enter promotion codes directly on the checkout page.
 
 ### Create Portal
 ```
 POST /api/create-portal-session
-Body: { userId: string, returnUrl: string }
+Body: { userId: string, returnUrl: string, licenseKey?: string }
 Response: { url: string }
 ```
+
+**Note**: `licenseKey` is optional but helps with license lookup if database was cleared.
 
 ## Security Notes
 
