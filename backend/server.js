@@ -53,26 +53,15 @@ app.get('/api/get-license', async (req, res) => {
       return res.status(400).json({ error: 'Missing userId' });
     }
 
-    console.log(`[GET-LICENSE] Request for userId: ${userId}`);
-    console.log(`[GET-LICENSE] Total licenses in store: ${licenses.size}`);
-    console.log(`[GET-LICENSE] License exists: ${licenses.has(userId)}`);
-
     const license = licenses.get(userId);
 
     if (!license) {
-      console.log(`[GET-LICENSE] ❌ No license found for userId: ${userId}`);
-      // List all userIds for debugging
-      const allUserIds = Array.from(licenses.keys());
-      console.log(`[GET-LICENSE] Available userIds: ${allUserIds.join(', ')}`);
       return res.status(404).json({ error: 'No license found for this user' });
     }
 
     if (!isValidLicense(license)) {
-      console.log(`[GET-LICENSE] ❌ License exists but invalid. Status: ${license.status}`);
       return res.status(404).json({ error: 'License found but not active' });
     }
-
-    console.log(`[GET-LICENSE] ✅ Returning license key for userId: ${userId}`);
     return res.json({ licenseKey: license.licenseKey });
   } catch (error) {
     console.error('[GET-LICENSE] Error:', error);
@@ -170,26 +159,149 @@ app.post('/api/create-checkout-session', async (req, res) => {
  */
 app.post('/api/create-portal-session', async (req, res) => {
   try {
-    const { userId, returnUrl } = req.body;
+    const { userId, returnUrl, licenseKey } = req.body;
 
     if (!userId) {
       return res.status(400).json({ error: 'Missing userId' });
     }
 
-    const license = licenses.get(userId);
-    if (!license || !license.stripeCustomerId) {
-      return res.status(404).json({ error: 'No active subscription found' });
+    let license = licenses.get(userId);
+    
+    // If license not found but licenseKey provided, try to find by licenseKey
+    if (!license && licenseKey) {
+      for (const [uid, lic] of licenses.entries()) {
+        if (lic.licenseKey === licenseKey) {
+          license = lic;
+          break;
+        }
+      }
+    }
+    
+    // If license not found by userId, try to find by looking up subscription from Stripe
+    if (!license) {
+      
+      // Try to find customer by looking up subscriptions with metadata
+      try {
+        // First, try to find by checking checkout sessions (more reliable)
+        let customerId = null;
+        let subscriptionId = null;
+        
+        try {
+          // Try exact match first
+          const sessions = await stripe.checkout.sessions.list({
+            limit: 100,
+            client_reference_id: userId
+          });
+          
+          if (sessions.data.length > 0) {
+            const completedSessions = sessions.data.filter(s => s.payment_status === 'paid');
+            const latestSession = completedSessions.length > 0 ? completedSessions[0] : sessions.data[0];
+            
+            if (latestSession.subscription) {
+              subscriptionId = latestSession.subscription;
+              const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+              customerId = typeof subscription.customer === 'string' 
+                ? subscription.customer 
+                : subscription.customer.id;
+            }
+          } else {
+            const allSessions = await stripe.checkout.sessions.list({ limit: 100 });
+            const matchingSession = allSessions.data.find(s => 
+              s.client_reference_id === userId || 
+              s.metadata?.userId === userId
+            );
+            
+            if (matchingSession && matchingSession.subscription) {
+              subscriptionId = matchingSession.subscription;
+              const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+              customerId = typeof subscription.customer === 'string' 
+                ? subscription.customer 
+                : subscription.customer.id;
+            }
+          }
+        } catch (sessionError) {
+          // Silent fail, will try subscription search
+        }
+        
+        // Fallback: search all subscriptions
+        if (!customerId) {
+          const subscriptions = await stripe.subscriptions.list({
+            limit: 100,
+            expand: ['data.customer'],
+            status: 'active'
+          });
+          
+          const matchingSub = subscriptions.data.find(sub => {
+            const metadataMatch = sub.metadata?.userId === userId;
+            const clientRefMatch = sub.client_reference_id === userId;
+            const sessionMetadataMatch = sub.metadata && Object.values(sub.metadata).includes(userId);
+            return metadataMatch || clientRefMatch || sessionMetadataMatch;
+          });
+          
+          if (matchingSub && matchingSub.customer) {
+            customerId = typeof matchingSub.customer === 'string' 
+              ? matchingSub.customer 
+              : matchingSub.customer.id;
+            subscriptionId = matchingSub.id;
+          }
+        }
+        
+        // If we found a customerId, create or find the license
+        if (customerId) {
+          const { findUserIdByCustomerId, createLicense } = require('./licenseService');
+          const existingUserId = findUserIdByCustomerId(customerId, licenses);
+          
+          if (existingUserId) {
+            license = licenses.get(existingUserId);
+          } else {
+            if (!subscriptionId) {
+              const customerSubs = await stripe.subscriptions.list({
+                customer: customerId,
+                limit: 1,
+                status: 'active'
+              });
+              
+              if (customerSubs.data.length > 0) {
+                subscriptionId = customerSubs.data[0].id;
+              }
+            }
+            
+            if (subscriptionId) {
+              createLicense(userId, customerId, subscriptionId, licenses);
+              license = licenses.get(userId);
+            }
+          }
+        }
+      } catch (stripeError) {
+        console.error('[PORTAL] Stripe lookup error:', stripeError.message);
+      }
+    }
+    
+    if (!license) {
+      return res.status(404).json({ 
+        error: 'No active subscription found',
+        details: 'Your subscription may not be active yet, or the server was restarted. Please try again in a few moments, or contact support if the issue persists.'
+      });
+    }
+
+    if (!license.stripeCustomerId) {
+      return res.status(404).json({ 
+        error: 'Subscription not linked',
+        details: 'Your license exists but is not linked to a Stripe customer. Please contact support.'
+      });
     }
 
     const session = await stripe.billingPortal.sessions.create({
       customer: license.stripeCustomerId,
-      return_url: returnUrl || `${req.headers.origin}/options`,
+      return_url: returnUrl || `${req.headers.origin || BACKEND_URL}/options`,
     });
-
     res.json({ url: session.url });
   } catch (error) {
-    console.error('Portal session error:', error);
-    res.status(500).json({ error: error.message });
+    console.error('[PORTAL] Error:', error);
+    res.status(500).json({ 
+      error: error.message,
+      details: error.type === 'StripeInvalidRequestError' ? error.message : 'Failed to create portal session'
+    });
   }
 });
 
@@ -224,7 +336,6 @@ app.post('/api/webhook', express.raw({ type: 'application/json' }), async (req, 
         break;
 
       default:
-        console.log(`[WEBHOOK] Unhandled event type: ${event.type}`);
     }
 
     res.json({ received: true });
@@ -278,7 +389,6 @@ app.post('/api/auto-create-license', async (req, res) => {
     // Create license using shared function
     const licenseKey = createLicense(userId, subscription.customer, subscription.id, licenses);
     
-    console.log(`[AUTO-CREATE] License created for userId: ${userId}, sessionId: ${sessionId}`);
     
     res.json({ 
       success: true, 
@@ -327,7 +437,6 @@ if (IS_DEV) {
       // Create license using shared function
       const licenseKey = createLicense(userId, customerId, subscription.id, licenses);
       
-      console.log(`[DEBUG] License manually created for userId: ${userId}, customerId: ${customerId}`);
       
       res.json({ 
         success: true, 

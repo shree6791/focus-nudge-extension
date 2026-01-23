@@ -6,7 +6,6 @@ const MAX_POLLING_ATTEMPTS = 15; // Poll for up to 15 seconds
 const SAVE_CONFIRMATION_DURATION_MS = 300;
 
 // DOM elements
-const planStatusEl = document.getElementById('planStatus');
 const proSettings = document.getElementById('proSettings');
 const toneSelect = document.getElementById('tone');
 const driftThresholdInput = document.getElementById('driftThreshold');
@@ -27,24 +26,34 @@ const { getSettings, saveSettings } = self.FocusNudgeSettings;
 async function loadState() {
   // Load plan
   const plan = await getPlan();
-  planStatusEl.textContent = plan.isPro ? 'Pro' : 'Basic';
+  const planBadge = document.getElementById('planBadge');
+  
+  // Update plan badge (top right)
+  if (planBadge) {
+    planBadge.textContent = plan.isPro ? 'PRO' : 'BASIC';
+    planBadge.className = `plan-badge ${plan.isPro ? 'pro' : 'basic'}`;
+  }
   
   // Show upgrade/manage buttons based on plan
   if (plan.isPro) {
     upgradeSection.style.display = 'none';
-    // Show manage subscription for Stripe users (not dev mode)
-    // Check if user has a license key (indicates Stripe subscription)
+    // Show manage subscription if user has a license key (Stripe subscription)
     const hasLicenseKey = await getLicenseKey();
-    if (plan.source === 'stripe' || (hasLicenseKey && plan.source !== 'dev')) {
+    if (hasLicenseKey) {
       manageSubscriptionSection.style.display = 'block';
     } else {
-      // Dev plan or no license key - don't show manage subscription
       manageSubscriptionSection.style.display = 'none';
     }
   } else {
     upgradeSection.style.display = 'block';
     manageSubscriptionSection.style.display = 'none';
   }
+  
+  // Show/hide PRO badges on disabled fields
+  const proBadges = document.querySelectorAll('.pro-badge-small');
+  proBadges.forEach(badge => {
+    badge.style.display = plan.isPro ? 'none' : 'inline-block';
+  });
   
   // Load effective settings
   const effectiveSettings = await getEffectiveSettings();
@@ -55,8 +64,10 @@ async function loadState() {
   cooldownInput.value = effectiveSettings.cooldown_min;
   
   // Enable/disable based on plan
+  // Tone is available for Basic users (to give them a taste of customization)
+  // Drift threshold and cooldown are Pro-only
   const isPro = plan.isPro;
-  toneSelect.disabled = !isPro;
+  toneSelect.disabled = false; // Always enabled - available for Basic users
   driftThresholdInput.disabled = !isPro;
   cooldownInput.disabled = !isPro;
   proSettings.classList.toggle('locked', !isPro);
@@ -111,8 +122,10 @@ async function handleManageSubscription() {
     manageButton.textContent = 'Loading...';
 
     const userId = await getUserId();
+    const licenseKey = await getLicenseKey();
     const apiUrl = getApiBaseUrl();
     const returnUrl = chrome.runtime.getURL('src/ui/options/options.html');
+
 
     const response = await fetch(`${apiUrl}/api/create-portal-session`, {
       method: 'POST',
@@ -121,19 +134,52 @@ async function handleManageSubscription() {
       },
       body: JSON.stringify({
         userId: userId,
-        returnUrl: returnUrl
+        returnUrl: returnUrl,
+        licenseKey: licenseKey // Include license key to help lookup
       })
     });
 
+    let responseData = {};
+    try {
+      const text = await response.text();
+      responseData = text ? JSON.parse(text) : {};
+    } catch (parseError) {
+    }
+    
     if (!response.ok) {
-      throw new Error('Failed to create portal session');
+      const errorMessage = responseData.details || responseData.error || `Server returned ${response.status}: ${response.statusText}`;
+      console.error('[MANAGE] Portal error response:', {
+        status: response.status,
+        statusText: response.statusText,
+        data: responseData
+      });
+      throw new Error(errorMessage);
     }
 
-    const { url } = await response.json();
+    const { url } = responseData;
+    if (!url) {
+      throw new Error('No portal URL received from server');
+    }
+    
     window.location.href = url;
   } catch (error) {
-    console.error('Portal error:', error);
-    alert('Error opening subscription management: ' + error.message);
+    console.error('[MANAGE] Portal error:', error);
+    const errorMsg = error.message || 'Failed to create portal session';
+    
+    // Show user-friendly error with actionable steps
+    let userMessage = `Unable to open subscription management:\n\n${errorMsg}`;
+    
+    if (errorMsg.includes('No active subscription found')) {
+      userMessage += '\n\nThis usually happens when:\n';
+      userMessage += '• The server was restarted (licenses are temporarily stored in memory)\n';
+      userMessage += '• Your subscription is still being activated\n\n';
+      userMessage += 'The system will try to recover your subscription automatically.\n';
+      userMessage += 'Please wait 10-20 seconds and try again.';
+    } else {
+      userMessage += '\n\nPlease try again in a few moments, or contact support if the issue persists.';
+    }
+    
+    alert(userMessage);
     manageButton.disabled = false;
     manageButton.textContent = 'Manage Subscription';
   }
@@ -172,18 +218,15 @@ async function pollForLicenseActivation(showLoading = true) {
     const userId = await getUserId();
     const apiUrl = getApiBaseUrl();
     
-    // Log activation attempt (reduced logging for production)
-    if (showLoading) {
-      console.log('[Focus Nudge] Checking for license activation...', { userId, apiUrl });
-    }
     
     // Get session ID from URL if available
     const urlParams = new URLSearchParams(window.location.search);
     const sessionId = urlParams.get('session_id');
     
     // Show loading indicator only if requested
-    if (showLoading && planStatusEl) {
-      planStatusEl.textContent = 'Activating...';
+    if (showLoading) {
+      const planBadge = document.getElementById('planBadge');
+      if (planBadge) planBadge.textContent = 'ACTIVATING...';
     }
     
     // Poll for license (webhook might take a moment)
@@ -204,8 +247,12 @@ async function pollForLicenseActivation(showLoading = true) {
     }
     
     // License not found - reset status if showing loading
-    if (planStatusEl && showLoading) {
-      planStatusEl.textContent = 'Basic';
+    if (showLoading) {
+      const planBadge = document.getElementById('planBadge');
+      if (planBadge) {
+        planBadge.textContent = 'BASIC';
+        planBadge.className = 'plan-badge basic';
+      }
     }
     
     // Show alert only if user has payment indicators
@@ -214,8 +261,12 @@ async function pollForLicenseActivation(showLoading = true) {
     }
   } catch (error) {
     console.error('[Focus Nudge] License activation error:', error);
-    if (planStatusEl && showLoading) {
-      planStatusEl.textContent = 'Basic';
+    if (showLoading) {
+      const planBadge = document.getElementById('planBadge');
+      if (planBadge) {
+        planBadge.textContent = 'BASIC';
+        planBadge.className = 'plan-badge basic';
+      }
     }
     
     // Only show alert if we were showing loading
@@ -241,13 +292,11 @@ async function pollForLicense(userId, apiUrl, maxAttempts = MAX_POLLING_ATTEMPTS
       
       if (response.ok) {
         const { licenseKey } = await response.json();
-        console.log('[Focus Nudge] ✅ License found');
         return licenseKey;
       }
     } catch (error) {
       // Only log errors on last attempt to reduce console noise
       if (attempt === maxAttempts - 1) {
-        console.warn('[Focus Nudge] License polling error:', error);
       }
     }
     
@@ -280,7 +329,6 @@ async function tryAutoCreateLicense(userId, sessionId, apiUrl) {
       return licenseKey;
     }
   } catch (error) {
-    console.warn('[Focus Nudge] Auto-create fallback failed:', error);
   }
   
   return null;

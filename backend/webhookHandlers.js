@@ -14,12 +14,7 @@ function initWebhookHandlers(stripeInstance) {
   async function handleCheckoutCompleted(session, licenses) {
     const userId = session.client_reference_id || session.metadata?.userId;
     
-    console.log(`[WEBHOOK] Checkout completed - userId: ${userId}, mode: ${session.mode}, subscription: ${session.subscription}`);
-    console.log(`[WEBHOOK] client_reference_id: ${session.client_reference_id}`);
-    console.log(`[WEBHOOK] metadata:`, JSON.stringify(session.metadata));
-    
     if (!userId || session.mode !== 'subscription') {
-      console.warn(`[WEBHOOK] ⚠️ Checkout completed but missing userId or not subscription mode. userId: ${userId}, mode: ${session.mode}`);
       return;
     }
 
@@ -27,19 +22,13 @@ function initWebhookHandlers(stripeInstance) {
       const subscription = await stripeInstance.subscriptions.retrieve(session.subscription);
       const customerId = subscription.customer;
       
-      console.log(`[WEBHOOK] Subscription retrieved - customerId: ${customerId}, status: ${subscription.status}`);
-      
       // Check if license already exists
       const existing = licenses.get(userId);
       if (existing && existing.status === 'active') {
-        console.log(`[WEBHOOK] ⚠️ License already exists for userId: ${userId}, skipping creation`);
         return;
       }
       
-      const licenseKey = createLicense(userId, customerId, subscription.id, licenses);
-      
-      console.log(`[WEBHOOK] ✅ License activated for userId: ${userId}, licenseKey: ${licenseKey}`);
-      console.log(`[WEBHOOK] Total licenses now: ${licenses.size}`);
+      createLicense(userId, customerId, subscription.id, licenses);
     } catch (error) {
       console.error(`[WEBHOOK] Error processing checkout.session.completed:`, error);
       throw error;
@@ -71,7 +60,6 @@ function initWebhookHandlers(stripeInstance) {
       status: isActive ? 'active' : 'canceled' 
     });
     
-    console.log(`[WEBHOOK] License updated for userId: ${userId}, status: ${subscription.status}`);
   }
 
   return {

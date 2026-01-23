@@ -8,7 +8,7 @@ async function loadPlan() {
     badge.textContent = plan.isPro ? "Pro" : "Basic";
     badge.className = `plan-badge ${plan.isPro ? "pro" : "basic"}`;
   } catch (err) {
-    console.error("Error loading plan:", err);
+    // Silently fail - user can still access options
   }
 }
 

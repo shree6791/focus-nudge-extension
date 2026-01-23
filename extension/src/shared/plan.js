@@ -130,23 +130,14 @@
 
   /**
    * Get effective settings based on plan
-   * BASIC: Always returns hardcoded defaults (gentle, 15min, 30min)
-   * PRO: Returns user settings from storage (clamped to valid ranges)
+   * BASIC: Tone is customizable, but drift_threshold and cooldown are hard-enforced defaults
+   * PRO: All settings are customizable from storage (clamped to valid ranges)
    * @returns {Promise<{tone: string, drift_threshold_min: number, cooldown_min: number}>}
    */
   async function getEffectiveSettings() {
     const plan = await getPlan();
     
-    if (!plan.isPro) {
-      // BASIC: Hard-enforced defaults (security)
-      return {
-        tone: BASIC_DEFAULTS.tone,
-        drift_threshold_min: BASIC_DEFAULTS.drift_threshold_min,
-        cooldown_min: BASIC_DEFAULTS.cooldown_min
-      };
-    }
-    
-    // PRO: Read from storage and clamp values
+    // Read settings from storage (both Basic and Pro can customize tone)
     const stored = await chrome.storage.local.get({
       focusNudgeSettings: {
         tone: "gentle",
@@ -157,7 +148,18 @@
     
     const settings = stored.focusNudgeSettings;
     
-    // Clamp values to valid ranges
+    if (!plan.isPro) {
+      // BASIC: Tone is customizable, but drift_threshold and cooldown are hard-enforced
+      return {
+        tone: ["gentle", "motivational", "sarcastic"].includes(settings.tone) 
+          ? settings.tone 
+          : BASIC_DEFAULTS.tone,
+        drift_threshold_min: BASIC_DEFAULTS.drift_threshold_min,
+        cooldown_min: BASIC_DEFAULTS.cooldown_min
+      };
+    }
+    
+    // PRO: All settings are customizable (clamped to valid ranges)
     return {
       tone: ["gentle", "motivational", "sarcastic"].includes(settings.tone) 
         ? settings.tone 

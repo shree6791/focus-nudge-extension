@@ -2,124 +2,42 @@
 
 Backend API for Stripe payment processing and license verification.
 
-## Setup
+> **📖 For complete setup instructions, see [STRIPE_SETUP.md](../STRIPE_SETUP.md)**
 
-### 1. Install Dependencies
+## Quick Start
 
 ```bash
-cd backend
+# Install dependencies
 npm install
-```
 
-### 2. Configure Environment
+# Configure environment (see STRIPE_SETUP.md for details)
+cp .env.example .env
+# Edit .env with your Stripe keys
 
-1. Copy `.env.example` to `.env`:
-   ```bash
-   cp .env.example .env
-   ```
-
-2. Get your Stripe keys from [Stripe Dashboard](https://dashboard.stripe.com):
-   - **Secret Key**: `sk_test_...` (for testing) or `sk_live_...` (for production)
-   - **Webhook Secret**: Create a webhook endpoint in Stripe Dashboard and copy the secret
-   - **Note**: Publishable key is NOT needed - we use Stripe Checkout (server-side), not Stripe.js
-
-3. Update `.env` with your keys:
-   ```env
-   STRIPE_SECRET_KEY=sk_test_...
-   STRIPE_WEBHOOK_SECRET=whsec_...
-   STRIPE_PRICE_ID=price_xxxxx
-   PORT=3000
-   ```
-
-### 3. Set Up Stripe Webhook
-
-1. Go to [Stripe Dashboard → Webhooks](https://dashboard.stripe.com/webhooks)
-2. Click "Add endpoint"
-3. Endpoint URL: `https://your-domain.com/api/webhook` (use ngrok for local testing)
-4. Select events to listen to:
-   - `checkout.session.completed`
-   - `customer.subscription.updated`
-   - `customer.subscription.deleted`
-5. Copy the webhook signing secret to `.env`
-
-### 4. Run the Server
-
-```bash
-# Development (with auto-reload)
-npm run dev
-
-# Production
+# Run server
 npm start
 ```
 
-## Local Testing with ngrok
+## Environment Variables
 
-For local webhook testing:
+Required:
+- `STRIPE_SECRET_KEY` - Your Stripe secret key
+- `STRIPE_WEBHOOK_SECRET` - Webhook signing secret
+- `STRIPE_PRICE_ID` - Your Stripe Price ID (required)
 
-```bash
-# Install ngrok
-brew install ngrok  # macOS
-# or download from https://ngrok.com
-
-# Start your server
-npm start
-
-# In another terminal, expose local server
-ngrok http 3000
-
-# Use the ngrok URL in Stripe webhook configuration
-# Example: https://abc123.ngrok.io/api/webhook
-```
+Optional:
+- `PORT` - Server port (default: 3000)
+- `BACKEND_URL` - Backend URL (default: render.com URL)
+- `NODE_ENV` - Environment (production/development)
 
 ## API Endpoints
 
-### `GET /api/verify-license`
-Verify if a user has a valid Pro license.
+See [STRIPE_SETUP.md](../STRIPE_SETUP.md#api-reference) for detailed API documentation.
 
-**Query Parameters:**
-- `userId`: User identifier (e.g., Chrome extension ID)
-- `licenseKey`: License key to verify
-
-**Response:**
-```json
-{
-  "valid": true,
-  "isPro": true
-}
-```
-
-### `POST /api/create-checkout-session`
-Create a Stripe Checkout session for Pro subscription.
-
-**Body:**
-```json
-{
-  "userId": "user123",
-  "returnUrl": "https://..."
-}
-```
-
-**Response:**
-```json
-{
-  "sessionId": "cs_...",
-  "url": "https://checkout.stripe.com/..."
-}
-```
-
-### `POST /api/create-portal-session`
-Create a Stripe Customer Portal session for managing subscription.
-
-**Body:**
-```json
-{
-  "userId": "user123",
-  "returnUrl": "https://..."
-}
-```
-
-### `POST /api/webhook`
-Stripe webhook endpoint (handles subscription events).
+- `GET /api/verify-license` - Verify Pro license
+- `POST /api/create-checkout-session` - Create Stripe Checkout session
+- `POST /api/create-portal-session` - Create Customer Portal session
+- `POST /api/webhook` - Stripe webhook handler
 
 ## Production Considerations
 
@@ -131,7 +49,21 @@ Stripe webhook endpoint (handles subscription events).
 
 ## License Storage
 
-Currently uses in-memory storage. For production, use a database:
+### Current Implementation (In-Memory)
+
+**⚠️ Important:** The backend currently uses in-memory storage (`Map`) for licenses. This means:
+- Licenses are **lost when the server restarts**
+- A fallback mechanism queries Stripe API to recover licenses (slower, but works)
+- This is **fine for testing/small-scale use**, but **not ideal for production**
+
+**Database Migration:** We plan to migrate to a database (PostgreSQL, MongoDB, etc.) later. The current Stripe lookup fallback ensures the system continues to work even after server restarts, but a database will provide:
+- Persistent storage (survives server restarts)
+- Better performance (no Stripe API lookups needed)
+- Scalability for production use
+
+### Future Database Implementation
+
+When migrating to a database, use something like:
 
 ```javascript
 // Example with PostgreSQL
